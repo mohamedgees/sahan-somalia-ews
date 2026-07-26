@@ -22,6 +22,9 @@ build/
 .DS_Store
 Thumbs.db
 
+# Microsoft Office lock files (created while a .docx/.md/.xlsx is open)
+~$*
+
 # Misc project scratch/debug output
 debug_url_out.txt
 debug_output.txt
