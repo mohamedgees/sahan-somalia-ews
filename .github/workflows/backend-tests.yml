@@ -1,0 +1,39 @@
+name: Backend
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dev dependencies
+        # Only pytest/black/ruff — not the full GEE/geo stack (rasterio,
+        # geopandas, earthengine-api), which the pure-logic tests don't need
+        # and which requires credentials this CI job doesn't have.
+        run: pip install pytest black ruff
+
+      - name: Run tests
+        run: pytest -v
+
+      - name: Check formatting (black)
+        run: black --check .
+
+      - name: Lint (ruff)
+        run: ruff check .
