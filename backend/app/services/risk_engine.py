@@ -35,7 +35,7 @@ WEIGHTS_DRY = {"spi": 0.50, "vhi": 0.35, "smi": 0.15, "spei": 0.00}
 # Drought Severity Classification (0-1 CDI scale, ICPAC-inspired)
 # Project-defined thresholds; not a verified external WMO/ICPAC citation.
 # ------------------------------------------------------------------
-WMO_THRESHOLDS = [
+CDI_SEVERITY_THRESHOLDS = [
     (0.80, "Extreme", "#990000"),
     (0.60, "Severe", "#ff0000"),
     (0.40, "Moderate", "#ff9900"),
@@ -113,11 +113,12 @@ def compute_cdi(spi, vhi, smi_anomaly, spei, month: int) -> float:
 
 
 # ------------------------------------------------------------------
-# WMO Classification
+# Drought Severity Classification
 # ------------------------------------------------------------------
 def classify_cdi(cdi_score: float) -> dict:
-    """Return WMO status label and hex colour for a CDI value."""
-    for threshold, status, color in WMO_THRESHOLDS:
+    """Return the project-defined severity status label and hex colour for a CDI value
+    (not a verified external WMO/ICPAC citation — see module docstring)."""
+    for threshold, status, color in CDI_SEVERITY_THRESHOLDS:
         if cdi_score >= threshold:
             return {"status": status, "color": color, "score": round(cdi_score, 4)}
     return {"status": "Normal", "color": "#05e100", "score": round(cdi_score, 4)}

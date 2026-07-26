@@ -382,6 +382,30 @@ def get_monthly_anomaly(
     return anomaly.clip(somalia)
 
 
+def _resolve_data_month(collection, band, target_date_str):
+    """Return the 'YYYY-MM-01' string for the most recent month at or before
+    `target_date_str` that actually has at least one `band` image in `collection`.
+
+    This mirrors get_monthly_anomaly()'s own single-month fallback, but *exposes*
+    the resolved month so callers building a multi-month rolling window (e.g.
+    SPI-3) can anchor month-1/month-2 offsets on the real data month instead of
+    the nominal calendar month. Without this, whenever the nominal "current"
+    month has no data yet (CHIRPS typically lags several weeks), each
+    independent get_monthly_anomaly() call falls back to the same prior month
+    on its own — so a naive 3-call rolling sum silently counts that one month
+    twice and omits the month it should have covered, skewing the composite
+    toward whatever that one month's anomaly happened to be.
+    """
+    month_start = datetime.strptime(target_date_str[:10], "%Y-%m-%d").replace(day=1)
+    for _ in range(3):
+        m_start = ee.Date(month_start.strftime("%Y-%m-%d"))
+        m_end = m_start.advance(1, "month")
+        if collection.filterDate(m_start, m_end).select(band).size().getInfo() > 0:
+            return month_start.strftime("%Y-%m-01")
+        month_start = month_start - relativedelta(months=1)
+    return month_start.strftime("%Y-%m-01")
+
+
 def _monthly_water_balance(era5_collection, month_start):
     """Monthly D = Precipitation - PET (mm), from ERA5-Land DAILY_AGGR.
     ECMWF's convention: potential_evaporation_sum is negative (upward/evaporative flux),
@@ -518,12 +542,15 @@ def get_cdi_layer(date_str: str):
     dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
     month = dt.month
 
-    # 1. SPI-3 (CHIRPS 3-month rolling)
+    # 1. SPI-3 (CHIRPS 3-month rolling) — anchored on the most recent month CHIRPS
+    # actually has data for, not the nominal calendar month (see _resolve_data_month).
     chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-    date_m1 = (dt - relativedelta(months=1)).strftime("%Y-%m-01")
-    date_m2 = (dt - relativedelta(months=2)).strftime("%Y-%m-01")
+    anchor_str = _resolve_data_month(chirps, "precipitation", date_str)
+    anchor_dt = datetime.strptime(anchor_str, "%Y-%m-%d")
+    date_m1 = (anchor_dt - relativedelta(months=1)).strftime("%Y-%m-01")
+    date_m2 = (anchor_dt - relativedelta(months=2)).strftime("%Y-%m-01")
     spi_img = (
-        get_monthly_anomaly(chirps, "precipitation", date_str)
+        get_monthly_anomaly(chirps, "precipitation", anchor_str)
         .add(get_monthly_anomaly(chirps, "precipitation", date_m1))
         .add(get_monthly_anomaly(chirps, "precipitation", date_m2))
         .divide(math.sqrt(3))
@@ -593,11 +620,18 @@ def get_cdi_timeseries(lat: float, lon: float):
         try:
             dt = datetime.strptime(d_str[:10], "%Y-%m-%d")
             month = dt.month
-            d1 = (dt - relativedelta(months=1)).strftime("%Y-%m-01")
-            d2 = (dt - relativedelta(months=2)).strftime("%Y-%m-01")
+            # Anchor SPI-3 on the most recent month CHIRPS actually has data for
+            # (matters for the most recent point in this loop, d_str == current
+            # calendar month, which may not have data yet) — see get_cdi_layer's
+            # identical fix and _resolve_data_month's docstring for why this
+            # avoids double-counting a month when the nominal one is empty.
+            anchor_str = _resolve_data_month(chirps, "precipitation", d_str)
+            anchor_dt = datetime.strptime(anchor_str, "%Y-%m-%d")
+            d1 = (anchor_dt - relativedelta(months=1)).strftime("%Y-%m-01")
+            d2 = (anchor_dt - relativedelta(months=2)).strftime("%Y-%m-01")
             # SPI-3
             s0 = (
-                get_monthly_anomaly(chirps, "precipitation", d_str)
+                get_monthly_anomaly(chirps, "precipitation", anchor_str)
                 .reduceRegion(ee.Reducer.mean(), point, 5000)
                 .get("anomaly")
                 .getInfo()
@@ -1433,6 +1467,7 @@ def get_drought_stats(date_str: str = None) -> dict:
     using the same ICPAC-inspired 4-index CDI as get_cdi_layer for consistency."""
     require_gee()
     from app.services.risk_engine import (
+        classify_cdi,
         gee_compute_cdi,
         gee_normalize_smi,
         gee_normalize_spei,
@@ -1453,12 +1488,17 @@ def get_drought_stats(date_str: str = None) -> dict:
 
     # 1. Inputs — same ICPAC 4-index composite used by the CDI map layer
     # (SPI-3 + VHI + SMI + SPEI), so this endpoint agrees with get_cdi_layer.
+    # Anchored on the most recent month CHIRPS actually has data for (see
+    # _resolve_data_month) so the current month doesn't get double-counted
+    # when it has no data published yet.
     chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-    date_m1 = (dt - relativedelta(months=1)).strftime("%Y-%m-01")
-    date_m2 = (dt - relativedelta(months=2)).strftime("%Y-%m-01")
+    anchor_str = _resolve_data_month(chirps, "precipitation", date_str)
+    anchor_dt = datetime.strptime(anchor_str, "%Y-%m-%d")
+    date_m1 = (anchor_dt - relativedelta(months=1)).strftime("%Y-%m-01")
+    date_m2 = (anchor_dt - relativedelta(months=2)).strftime("%Y-%m-01")
 
     spi3 = (
-        get_monthly_anomaly(chirps, "precipitation", date_str)
+        get_monthly_anomaly(chirps, "precipitation", anchor_str)
         .add(get_monthly_anomaly(chirps, "precipitation", date_m1))
         .add(get_monthly_anomaly(chirps, "precipitation", date_m2))
         .divide(math.sqrt(3))
@@ -1499,22 +1539,16 @@ def get_drought_stats(date_str: str = None) -> dict:
     for feat in data["features"]:
         props = feat["properties"]
         val = props.get("mean", 0)
-        status = "Normal"
-        color = "#05e100"
-        if val > 0.8:
-            status = "Extreme"
-            color = "#990000"
+        # Reuse risk_engine's canonical classifier so this district table always
+        # agrees with the CDI map layer, point time series, and AI insights text
+        # (a hand-duplicated threshold chain here previously used a strict ">"
+        # comparison while classify_cdi uses ">=", disagreeing at exact boundary
+        # values like 0.40, 0.60, 0.80).
+        classification = classify_cdi(val)
+        status = classification["status"]
+        color = classification["color"]
+        if status in ("Extreme", "Severe"):
             total_severe += 1
-        elif val > 0.6:
-            status = "Severe"
-            color = "#ff0000"
-            total_severe += 1
-        elif val > 0.4:
-            status = "Moderate"
-            color = "#ff9900"
-        elif val > 0.2:
-            status = "Watch"
-            color = "#ffff00"
 
         item = {
             "district": props.get("ADM2_NAME"),
@@ -1524,7 +1558,7 @@ def get_drought_stats(date_str: str = None) -> dict:
             "color": color,
         }
         results.append(item)
-        if val > 0.4:
+        if status in ("Moderate", "Severe", "Extreme"):
             hotspots.append(item)
 
     hotspots.sort(key=lambda x: x["cdi"], reverse=True)
@@ -1596,9 +1630,15 @@ def get_multi_index_context(
 
         # -----------------------------------------------------------
         # 1. Current month SPI (vs 1991-2020 CHIRPS climatology)
+        # Anchored on the most recent month CHIRPS actually has data for (see
+        # _resolve_data_month) — the nominal calendar month may not have
+        # published data yet, and section 3's prior-month comparison below
+        # must be relative to this same anchor to avoid double-counting it.
         # -----------------------------------------------------------
+        spi_anchor_str = _resolve_data_month(chirps, "precipitation", date_str)
+        spi_anchor_dt = datetime.strptime(spi_anchor_str, "%Y-%m-%d")
         spi1 = (
-            get_monthly_anomaly(chirps, "precipitation", date_str)
+            get_monthly_anomaly(chirps, "precipitation", spi_anchor_str)
             .reduceRegion(ee.Reducer.mean(), geom, 5000)
             .get("anomaly")
             .getInfo()
@@ -1692,8 +1732,8 @@ def get_multi_index_context(
         # 3. Real 3-month rainfall trend (improving / stable / worsening)
         #    Compare current SPI against average of the 2 prior months.
         # -----------------------------------------------------------
-        spi_prev1_str = (dt - relativedelta(months=1)).strftime("%Y-%m-01")
-        spi_prev2_str = (dt - relativedelta(months=2)).strftime("%Y-%m-01")
+        spi_prev1_str = (spi_anchor_dt - relativedelta(months=1)).strftime("%Y-%m-01")
+        spi_prev2_str = (spi_anchor_dt - relativedelta(months=2)).strftime("%Y-%m-01")
         sp1, sp2 = 0.0, 0.0
         try:
             sp1 = (
@@ -1777,11 +1817,18 @@ def get_multi_index_context(
             normalize_vhi,
         )
 
-        spi_s = normalize_spi(spi1)
+        # CDI's SPI input is SPI-3 (3-month rolling), matching get_cdi_layer /
+        # get_drought_stats / get_cdi_timeseries — using the single-month `spi1`
+        # here instead would let this endpoint's CDI (and the AI insights text
+        # derived from it) disagree with the map layer and district table for
+        # the same date/scope. Reuses sp1/sp2 already fetched in section 3 above
+        # (anchored on the same resolved data month) rather than re-querying.
+        spi3_val = (spi1 + sp1 + sp2) / math.sqrt(3)
+        spi_s = normalize_spi(spi3_val)
         vhi_s = normalize_vhi(vhi_val)
         smi_s = normalize_smi(smi_val)
         spei_s = normalize_spei(spei_val)
-        cdi_val = compute_cdi(spi1, vhi_val, smi_val, spei_val, month)
+        cdi_val = compute_cdi(spi3_val, vhi_val, smi_val, spei_val, month)
         classification = classify_cdi(cdi_val)
         context["cdi"] = cdi_val
         context["normalized_scores"] = {
