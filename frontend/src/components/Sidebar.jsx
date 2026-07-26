@@ -95,20 +95,8 @@ const Sidebar = ({
                             style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
                         >
                             <h4 className="subcategory-title" style={{ marginTop: 0 }}>
-                                🎯 Combined Risk
+                                🌧️ Climate & Rainfall
                             </h4>
-                            <label className="radio-label">
-                                <input
-                                    type="radio"
-                                    checked={activeBaseLayer === 'cdi'}
-                                    onChange={() => setActiveBaseLayer('cdi')}
-                                />
-                                <span title="Combined Drought Index — ICPAC-inspired seasonally-weighted composite of SPI, VHI, SMI and SPEI (see Legend for methodology note)">
-                                    CDI (Combined Drought Index)
-                                </span>
-                            </label>
-
-                            <h4 className="subcategory-title">🌧️ Climate & Rainfall</h4>
                             <label className="radio-label">
                                 <input
                                     type="radio"
@@ -221,6 +209,18 @@ const Sidebar = ({
                                     onChange={() => setActiveBaseLayer('bsi')}
                                 />
                                 <span>BSI (Bare Soil Index)</span>
+                            </label>
+
+                            <h4 className="subcategory-title">🎯 Combined Risk</h4>
+                            <label className="radio-label">
+                                <input
+                                    type="radio"
+                                    checked={activeBaseLayer === 'cdi'}
+                                    onChange={() => setActiveBaseLayer('cdi')}
+                                />
+                                <span title="Combined Drought Index — ICPAC-inspired seasonally-weighted composite of SPI, VHI, SMI and SPEI (see Legend for methodology note)">
+                                    CDI (Combined Drought Index)
+                                </span>
                             </label>
                         </div>
                     )}
