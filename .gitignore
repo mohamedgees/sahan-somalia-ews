@@ -1,0 +1,42 @@
+# Secrets / credentials
+.env
+.env.*
+gee-key.json
+*-key.json
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Misc project scratch/debug output
+debug_url_out.txt
+debug_output.txt
+*.log
+
+# Local backup snapshots / AI-agent tooling config — not part of the
+# application, kept locally but excluded from the public repo.
+_PROJECT_BACKUP_*/
+.agents/
+
+# Raw flash-flood preprocessing inputs (large binary rasters + source basin
+# boundaries) — only needed to *regenerate* somalia_basins_ffsi.geojson via
+# backend/scripts/preprocess_flood_data.py. Two of these exceed GitHub's
+# 100MB file-size limit. The app only needs the preprocessed output below,
+# which IS tracked.
+flash floods base data/*.tif
+flash floods base data/somalia_basins.geojson
+!flash floods base data/somalia_basins_ffsi.geojson
