@@ -1,6 +1,7 @@
 # Secrets / credentials
 .env
 .env.*
+!.env.example
 gee-key.json
 *-key.json
 

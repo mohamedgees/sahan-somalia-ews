@@ -60,8 +60,24 @@ def classify_swalim_rainfall(image):
 
 def get_key_path():
     """
-    Locate the gee-key.json file.
+    Locate the gee-key.json file, or materialize one from the
+    GEE_SERVICE_ACCOUNT_JSON environment variable.
+
+    The env-var path exists for hosts (Render, Railway, etc.) where the key
+    file itself can't be committed to the repo or uploaded as a build
+    artifact — instead the full service-account JSON is pasted into the
+    host's secret environment variable UI, and this writes it to a local
+    temp file once per process so the rest of the code can keep treating it
+    as an ordinary file path.
     """
+    if os.environ.get("GEE_SERVICE_ACCOUNT_JSON"):
+        import tempfile
+
+        tmp_path = os.path.join(tempfile.gettempdir(), "gee-key.json")
+        if not os.path.exists(tmp_path):
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(os.environ["GEE_SERVICE_ACCOUNT_JSON"])
+        return tmp_path
     if os.environ.get("GEE_KEY_PATH"):
         return os.environ.get("GEE_KEY_PATH")
     from app.core.paths import BACKEND_DIR, PROJECT_ROOT

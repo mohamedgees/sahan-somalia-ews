@@ -4,6 +4,7 @@ Run with: uvicorn app.main:app --reload --port 8000 (from the backend/ directory
 """
 
 import logging
+import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -20,12 +21,17 @@ logger = logging.getLogger("somalia_ews")
 
 app = FastAPI(title="Somalia Drought EWS API")
 
-# Allow CORS for the frontend
+# Allow CORS for the frontend. Local dev origins are always allowed; a
+# deployed frontend's origin(s) are added via FRONTEND_ORIGINS (comma-
+# separated, e.g. "https://sahan.vercel.app") so production hosts don't
+# require a code change to be reachable.
 origins = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
 ]
+extra_origins = os.environ.get("FRONTEND_ORIGINS", "")
+origins += [o.strip() for o in extra_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
