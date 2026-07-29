@@ -55,6 +55,7 @@ const MapDashboard = () => {
     const [waterSourceInsights, setWaterSourceInsights] = useState(null);
 
     const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const { layerUrl } = useLayerData(
         activeBaseLayer,
@@ -87,6 +88,19 @@ const MapDashboard = () => {
 
     return (
         <div className={`dashboard-container ${isRightPanelOpen ? 'has-right-panel' : ''}`}>
+            <button
+                className="sidebar-toggle-btn"
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="Open menu"
+                type="button"
+            >
+                ☰
+            </button>
+
+            {isSidebarOpen && (
+                <div className="sidebar-backdrop" onClick={() => setIsSidebarOpen(false)} />
+            )}
+
             <Sidebar
                 sidebarTab={sidebarTab}
                 setSidebarTab={setSidebarTab}
@@ -100,6 +114,8 @@ const MapDashboard = () => {
                 setSelectedYear={setSelectedYear}
                 selectedMonth={selectedMonth}
                 setSelectedMonth={setSelectedMonth}
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
             />
 
             <MapView

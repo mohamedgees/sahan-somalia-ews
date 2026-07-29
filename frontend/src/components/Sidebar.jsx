@@ -35,6 +35,8 @@ const Sidebar = ({
     setSelectedYear,
     selectedMonth,
     setSelectedMonth,
+    isOpen,
+    onClose,
 }) => {
     const currentYear = new Date().getFullYear();
     const years = Array.from({ length: currentYear - 2000 + 1 }, (_, i) => currentYear - i);
@@ -44,7 +46,15 @@ const Sidebar = ({
             : ALL_MONTHS;
 
     return (
-        <div className="sidebar" style={{ zIndex: 1001 }}>
+        <div className={`sidebar ${isOpen ? 'sidebar-open' : ''}`} style={{ zIndex: 1001 }}>
+            <button
+                className="sidebar-close-btn"
+                onClick={onClose}
+                aria-label="Close menu"
+                type="button"
+            >
+                ×
+            </button>
             <div className="sidebar-header">
                 <img
                     src="/logo.png"
